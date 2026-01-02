@@ -130,8 +130,8 @@ export default function FlashcardApp() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 text-gray-900">
-      {/* Font setup */}
+    <main className="min-h-screen w-full flex items-center justify-center bg-gray-50 px-4">
+      {/* Fonts */}
       <style jsx global>{`
         @import url("https://fonts.googleapis.com/css2?family=Amiri&family=Libre+Baskerville&family=Noto+Serif+Bengali&display=swap");
         .custom-font {
@@ -139,9 +139,10 @@ export default function FlashcardApp() {
         }
       `}</style>
 
-      <div className="w-full max-w-xl space-y-6">
+      {/* CENTERED APP CONTAINER */}
+      <section className="w-full max-w-md flex flex-col items-center justify-center gap-5 text-gray-900">
         {!sessionId ? (
-          <div className="bg-white p-6 rounded-xl border space-y-4">
+          <div className="w-full bg-white p-6 rounded-xl border space-y-4">
             <h1 className="text-xl font-bold text-center">
               Create Flashcards
             </h1>
@@ -173,7 +174,7 @@ export default function FlashcardApp() {
 
             <button
               onClick={() => setCards([...cards, { front: "", back: "" }])}
-              className="text-blue-600 text-sm"
+              className="text-blue-600 text-sm block mx-auto"
             >
               + Add Card
             </button>
@@ -187,7 +188,7 @@ export default function FlashcardApp() {
           </div>
         ) : (
           <>
-            <div className="flex justify-between items-center bg-white p-3 rounded-lg border">
+            <div className="w-full flex justify-center gap-3 bg-white p-3 rounded-lg border">
               <button
                 onClick={toggleLive}
                 className={`px-3 py-1 rounded-full text-sm font-semibold ${
@@ -208,7 +209,7 @@ export default function FlashcardApp() {
             </div>
 
             {isLive && (
-              <div className="bg-white p-4 rounded-xl border space-y-2">
+              <div className="w-full bg-white p-4 rounded-xl border space-y-2">
                 <input
                   className="w-full p-2 border rounded-lg custom-font"
                   placeholder="New front"
@@ -232,7 +233,7 @@ export default function FlashcardApp() {
 
             <div
               onClick={() => setShowBack(!showBack)}
-              className="min-h-[50vh] bg-white rounded-2xl border flex items-center justify-center p-6 text-center cursor-pointer"
+              className="w-full min-h-[50vh] bg-white rounded-2xl border flex items-center justify-center p-6 text-center cursor-pointer"
             >
               <h2 className="text-2xl md:text-4xl custom-font leading-relaxed">
                 {showBack
@@ -253,7 +254,7 @@ export default function FlashcardApp() {
             </p>
           </>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
