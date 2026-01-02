@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Copy, Plus, Check, Settings2, ArrowLeft, ArrowRight } from 'lucide-react';
 
+// Connection to your database
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -13,9 +13,8 @@ export default function FlashcardApp() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [showBack, setShowBack] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
 
+  // Load session from URL if it exists
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('session');
@@ -34,16 +33,12 @@ export default function FlashcardApp() {
     }
   };
 
+  // Real-time listener: This is the "Live Update" magic
   useEffect(() => {
     if (!sessionId) return;
     const channel = supabase.channel(`sync-${sessionId}`)
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'flashcard_sessions', 
-        filter: `id=eq.${sessionId}` 
-      }, (payload) => {
-        setCards(payload.new.cards); // Update cards list if creator added more
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'flashcard_sessions', filter: `id=eq.${sessionId}` }, 
+      (payload) => {
         if (payload.new.is_live) {
           setCurrentIndex(payload.new.current_index);
           setIsLive(true);
@@ -54,12 +49,6 @@ export default function FlashcardApp() {
     return () => { supabase.removeChannel(channel); };
   }, [sessionId]);
 
-  const saveAndSync = async (updatedCards = cards) => {
-    if (sessionId) {
-      await supabase.from('flashcard_sessions').update({ cards: updatedCards }).eq('id', sessionId);
-    }
-  };
-
   const createSession = async () => {
     const { data } = await supabase.from('flashcard_sessions').insert([{ cards, is_live: false }]).select().single();
     if (data) {
@@ -69,105 +58,86 @@ export default function FlashcardApp() {
     }
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
-  const handleCardChange = async (index: number) => {
-    setCurrentIndex(index);
+  const handleNext = async () => {
+    const nextIdx = (currentIndex + 1) % cards.length;
+    setCurrentIndex(nextIdx);
     setShowBack(false);
-    if (isLive && sessionId) {
-      await supabase.from('flashcard_sessions').update({ current_index: index }).eq('id', sessionId);
+    if (isLive) {
+      await supabase.from('flashcard_sessions').update({ current_index: nextIdx }).eq('id', sessionId);
     }
   };
 
+  const toggleLive = async () => {
+    const nextLiveState = !isLive;
+    setIsLive(nextLiveState);
+    await supabase.from('flashcard_sessions').update({ is_live: nextLiveState }).eq('id', sessionId);
+  };
+
   return (
-    <div className="min-h-screen bg-white text-slate-900 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-10 text-gray-900">
+      {/* Font Definitions */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Amiri&family=Libre+Baskerville&family=Noto+Serif+Bengali&display=swap');
-        .mix-font { font-family: 'Amiri', 'Noto Serif Bengali', 'Libre Baskerville', serif; }
+        .custom-font-stack {
+          font-family: 'Amiri', 'Noto Serif Bengali', 'Libre Baskerville', serif;
+        }
       `}</style>
 
-      <div className="w-full max-w-md">
-        {!sessionId || isEditing ? (
-          <div className="space-y-6">
-            <h1 className="text-xl font-bold text-center mb-8">Manage Vocabulary</h1>
+      <div className="max-w-3xl mx-auto">
+        {!sessionId ? (
+          <div className="space-y-6 bg-white p-8 rounded-2xl shadow-sm border">
+            <h1 className="text-2xl font-bold border-b pb-4">Create Flashcards</h1>
             {cards.map((card, i) => (
-              <div key={i} className="flex flex-col gap-2 p-4 bg-slate-50 rounded-2xl">
+              <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input 
-                  className="bg-transparent border-none focus:ring-0 p-1 mix-font text-lg" 
-                  placeholder="Front Side"
+                  className="p-3 border rounded-lg custom-font-stack text-lg" 
+                  placeholder="Front side..."
                   value={card.front}
-                  onChange={(e) => { const c = [...cards]; c[i].front = e.target.value; setCards(c); }}
+                  onChange={(e) => {
+                    const c = [...cards]; c[i].front = e.target.value; setCards(c);
+                  }}
                 />
-                <hr className="border-slate-200" />
                 <input 
-                  className="bg-transparent border-none focus:ring-0 p-1 mix-font text-lg text-blue-600" 
-                  placeholder="Back Side"
+                  className="p-3 border rounded-lg custom-font-stack text-lg" 
+                  placeholder="Back side..."
                   value={card.back}
-                  onChange={(e) => { const c = [...cards]; c[i].back = e.target.value; setCards(c); }}
+                  onChange={(e) => {
+                    const c = [...cards]; c[i].back = e.target.value; setCards(c);
+                  }}
                 />
               </div>
             ))}
-            <button onClick={() => setCards([...cards, { front: '', back: '' }])} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 flex items-center justify-center gap-2">
-              <Plus size={18} /> Add Word
-            </button>
-            
-            {sessionId ? (
-              <button onClick={() => { setIsEditing(false); saveAndSync(); }} className="w-full py-4 bg-black text-white rounded-2xl font-bold">Save Changes</button>
-            ) : (
-              <button onClick={createSession} className="w-full py-4 bg-black text-white rounded-2xl font-bold">Create Live Session</button>
-            )}
+            <div className="flex gap-4">
+              <button onClick={() => setCards([...cards, { front: '', back: '' }])} className="text-blue-600 font-medium">+ Add Card</button>
+              <button onClick={createSession} className="bg-blue-600 text-white px-6 py-2 rounded-lg ml-auto hover:bg-blue-700">Launch & Share</button>
+            </div>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* Header Controls */}
-            <div className="flex justify-between items-center gap-2">
-              <button onClick={copyLink} className="flex-1 py-2 px-4 bg-slate-100 rounded-full text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95">
-                {isCopied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                {isCopied ? 'COPIED!' : 'COPY LINK'}
-              </button>
-              <button 
-                onClick={async () => {
-                  const s = !isLive; setIsLive(s);
-                  await supabase.from('flashcard_sessions').update({ is_live: s, current_index: currentIndex }).eq('id', sessionId);
-                }}
-                className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition active:scale-95 ${isLive ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}
-              >
-                {isLive ? 'LIVE: ON' : 'LIVE: OFF'}
-              </button>
-              <button onClick={() => setIsEditing(true)} className="p-2 bg-slate-100 rounded-full"><Settings2 size={16} /></button>
+          <div className="space-y-8 text-center">
+            <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border">
+               <button 
+                onClick={toggleLive}
+                className={`px-4 py-2 rounded-full font-bold transition ${isLive ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}
+               >
+                {isLive ? '● Live Sync Active' : '○ Enable Live Sync'}
+               </button>
+               <div className="text-sm text-gray-400 select-all">Share Link: {window.location.href}</div>
             </div>
 
-            {/* Flashcard */}
             <div 
               onClick={() => setShowBack(!showBack)}
-              className="aspect-[3/4] w-full bg-white rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100 flex flex-col items-center justify-center p-8 cursor-pointer transition-all active:scale-95"
+              className="h-80 w-full bg-white rounded-3xl shadow-xl border-b-8 border-blue-500 flex flex-col items-center justify-center p-10 cursor-pointer transition-transform active:scale-95"
             >
-              <span className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.3em] mb-auto">{showBack ? 'Answer' : 'Word'}</span>
-              <h2 className="text-4xl md:text-5xl mix-font text-center leading-relaxed mb-auto">
+              <span className="text-gray-400 text-xs mb-4 uppercase tracking-widest">{showBack ? 'Back' : 'Front'}</span>
+              <h2 className="text-5xl custom-font-stack leading-relaxed">
                 {showBack ? cards[currentIndex].back : cards[currentIndex].front}
               </h2>
-              <p className="mt-auto text-[10px] text-slate-300 font-bold">{currentIndex + 1} / {cards.length}</p>
             </div>
 
-            {/* Navigation */}
-            <div className="grid grid-cols-2 gap-4">
-              <button 
-                onClick={() => handleCardChange((currentIndex - 1 + cards.length) % cards.length)}
-                className="py-5 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-400 hover:text-black transition"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              <button 
-                onClick={() => handleCardChange((currentIndex + 1) % cards.length)}
-                className="py-5 bg-slate-900 text-white rounded-3xl flex items-center justify-center transition"
-              >
-                <ArrowRight size={24} />
-              </button>
+            <div className="flex justify-between items-center max-w-xs mx-auto">
+              <button onClick={handleNext} className="w-full py-4 bg-black text-white rounded-2xl text-xl font-bold hover:bg-gray-800">Next Card →</button>
             </div>
+            <p className="text-gray-400 font-serif italic">Card {currentIndex + 1} of {cards.length}</p>
           </div>
         )}
       </div>
