@@ -94,8 +94,16 @@ export default function FlashcardApp() {
   }, [sessionId]);
 
   const createSession = async () => {
+    console.log('Creating session with cards:', cards);
+    
     // Filter out any blank cards before creating session
     const validCards = cards.filter(card => card.front.trim() && card.back.trim());
+    console.log('Valid cards:', validCards);
+    
+    if (validCards.length === 0) {
+      alert('Please add at least one flashcard with both front and back filled in.');
+      return;
+    }
     
     const { data, error } = await supabase
       .from('flashcard_sessions')
@@ -110,10 +118,12 @@ export default function FlashcardApp() {
     
     if (error) {
       console.error('Error creating session:', error);
+      alert('Failed to create session. Check console for details.');
       return;
     }
     
     if (data) {
+      console.log('Session created:', data);
       const newUrl = `${window.location.origin}${window.location.pathname}?session=${data.id}`;
       window.history.pushState({}, '', newUrl);
       setSessionId(data.id);
@@ -250,7 +260,7 @@ export default function FlashcardApp() {
     }, 100);
   };
 
-  const hasValidCards = cards.some(card => card.front.trim() && card.back.trim());
+  const hasValidCards = cards.some(card => card.front.trim() !== '' && card.back.trim() !== '');
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 text-gray-900">
@@ -294,7 +304,7 @@ export default function FlashcardApp() {
               <button 
                 onClick={createSession} 
                 disabled={!hasValidCards}
-                className={`px-6 py-2 rounded-lg ml-auto transition ${hasValidCards ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                className={`px-6 py-2 rounded-lg ml-auto transition ${hasValidCards ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
               >
                 Launch
               </button>
