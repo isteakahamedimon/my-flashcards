@@ -15,11 +15,8 @@ export default function FlashcardApp() {
   const [isLive, setIsLive] = useState(false);
   const [showBack, setShowBack] = useState(false);
 
-  /* live add card */
   const [newFront, setNewFront] = useState("");
   const [newBack, setNewBack] = useState("");
-
-  /* copy link */
   const [copied, setCopied] = useState(false);
 
   /* Load session from URL */
@@ -134,10 +131,11 @@ export default function FlashcardApp() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 text-gray-900">
+      {/* Font setup */}
       <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Amiri&family=Noto+Serif+Bengali&display=swap");
+        @import url("https://fonts.googleapis.com/css2?family=Amiri&family=Libre+Baskerville&family=Noto+Serif+Bengali&display=swap");
         .custom-font {
-          font-family: "Amiri", "Noto Serif Bengali", serif;
+          font-family: "Amiri", "Noto Serif Bengali", "Libre Baskerville", serif;
         }
       `}</style>
 
@@ -151,7 +149,7 @@ export default function FlashcardApp() {
             {cards.map((card, i) => (
               <div key={i} className="space-y-2">
                 <input
-                  className="w-full p-2 border rounded-lg"
+                  className="w-full p-2 border rounded-lg custom-font"
                   placeholder="Front"
                   value={card.front}
                   onChange={(e) => {
@@ -161,7 +159,7 @@ export default function FlashcardApp() {
                   }}
                 />
                 <input
-                  className="w-full p-2 border rounded-lg"
+                  className="w-full p-2 border rounded-lg custom-font"
                   placeholder="Back"
                   value={card.back}
                   onChange={(e) => {
@@ -212,13 +210,13 @@ export default function FlashcardApp() {
             {isLive && (
               <div className="bg-white p-4 rounded-xl border space-y-2">
                 <input
-                  className="w-full p-2 border rounded-lg"
+                  className="w-full p-2 border rounded-lg custom-font"
                   placeholder="New front"
                   value={newFront}
                   onChange={(e) => setNewFront(e.target.value)}
                 />
                 <input
-                  className="w-full p-2 border rounded-lg"
+                  className="w-full p-2 border rounded-lg custom-font"
                   placeholder="New back"
                   value={newBack}
                   onChange={(e) => setNewBack(e.target.value)}
