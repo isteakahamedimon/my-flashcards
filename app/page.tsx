@@ -44,6 +44,7 @@ export default function FlashcardApp() {
       setCards(data.cards);
       setCurrentIndex(data.current_index);
       setIsLive(data.is_live);
+      setShowBack(data.show_back || false);
     }
   };
 
@@ -72,7 +73,7 @@ export default function FlashcardApp() {
           if (payload.new.is_live) {
             setCards(payload.new.cards);
             setCurrentIndex(payload.new.current_index);
-            setShowBack(false); // Reset card flip when syncing
+            setShowBack(payload.new.show_back || false);
           }
           
           // Always update the live status
@@ -101,7 +102,8 @@ export default function FlashcardApp() {
       .insert([{ 
         cards: validCards, 
         is_live: false,
-        current_index: 0 
+        current_index: 0,
+        show_back: false
       }])
       .select()
       .single();
@@ -117,6 +119,7 @@ export default function FlashcardApp() {
       setSessionId(data.id);
       setCards(validCards);
       setIsLive(false);
+      setShowBack(false);
     }
   };
 
@@ -129,7 +132,10 @@ export default function FlashcardApp() {
     if (sessionId && isLive) {
       const { error } = await supabase
         .from('flashcard_sessions')
-        .update({ current_index: nextIdx })
+        .update({ 
+          current_index: nextIdx,
+          show_back: false
+        })
         .eq('id', sessionId);
       
       if (error) {
@@ -147,11 +153,31 @@ export default function FlashcardApp() {
     if (sessionId && isLive) {
       const { error } = await supabase
         .from('flashcard_sessions')
-        .update({ current_index: prevIdx })
+        .update({ 
+          current_index: prevIdx,
+          show_back: false
+        })
         .eq('id', sessionId);
       
       if (error) {
         console.error('Error updating index:', error);
+      }
+    }
+  };
+
+  const handleFlipCard = async () => {
+    const newShowBack = !showBack;
+    setShowBack(newShowBack);
+    
+    // Only update database if live sync is enabled
+    if (sessionId && isLive) {
+      const { error } = await supabase
+        .from('flashcard_sessions')
+        .update({ show_back: newShowBack })
+        .eq('id', sessionId);
+      
+      if (error) {
+        console.error('Error flipping card:', error);
       }
     }
   };
@@ -165,7 +191,8 @@ export default function FlashcardApp() {
         .from('flashcard_sessions')
         .update({ 
           is_live: nextLiveState,
-          current_index: currentIndex // Sync current position when enabling
+          current_index: currentIndex,
+          show_back: showBack
         })
         .eq('id', sessionId);
       
@@ -291,7 +318,7 @@ export default function FlashcardApp() {
             </div>
 
             <div 
-              onClick={() => setShowBack(!showBack)}
+              onClick={handleFlipCard}
               className="h-80 w-full bg-white rounded-3xl shadow-xl border-b-8 border-blue-500 flex flex-col items-center justify-center p-10 cursor-pointer transition-transform active:scale-95"
             >
               <span className="text-gray-400 text-xs mb-4 uppercase tracking-widest">{showBack ? 'Back' : 'Front'}</span>
