@@ -37,26 +37,42 @@ export default function FlashcardApp() {
     }
   };
 
-  // Real-time listener: This syncs ALL changes across all users
+  // Real-time listener: This syncs ALL changes across all users when live sync is enabled
   useEffect(() => {
     if (!sessionId) return;
     
-    const channel = supabase.channel(`sync-${sessionId}`)
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'flashcard_sessions', 
-        filter: `id=eq.${sessionId}` 
-      }, (payload) => {
-        // Update all fields when any change occurs
-        setCards(payload.new.cards);
-        setCurrentIndex(payload.new.current_index);
-        setIsLive(payload.new.is_live);
-        setShowBack(false); // Reset card flip when syncing
-      })
-      .subscribe();
+    const channel = supabase
+      .channel(`session-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'flashcard_sessions',
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload: any) => {
+          console.log('Real-time update received:', payload);
+          
+          // Only update if live sync is enabled
+          if (payload.new.is_live) {
+            setCards(payload.new.cards);
+            setCurrentIndex(payload.new.current_index);
+            setShowBack(false); // Reset card flip when syncing
+          }
+          
+          // Always update the live status
+          setIsLive(payload.new.is_live);
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
     
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      console.log('Cleaning up subscription');
+      supabase.removeChannel(channel);
+    };
   }, [sessionId]);
 
   const createSession = async () => {
@@ -65,7 +81,7 @@ export default function FlashcardApp() {
     
     const { data } = await supabase.from('flashcard_sessions').insert([{ 
       cards: validCards, 
-      is_live: true, // Start with live sync enabled by default
+      is_live: false,
       current_index: 0 
     }]).select().single();
     
@@ -74,7 +90,7 @@ export default function FlashcardApp() {
       window.history.pushState({}, '', newUrl);
       setSessionId(data.id);
       setCards(validCards);
-      setIsLive(true);
+      setIsLive(false);
     }
   };
 
@@ -83,8 +99,8 @@ export default function FlashcardApp() {
     setCurrentIndex(nextIdx);
     setShowBack(false);
     
-    // Always update database for real-time sync
-    if (sessionId) {
+    // Only update database if live sync is enabled
+    if (sessionId && isLive) {
       await supabase.from('flashcard_sessions').update({ 
         current_index: nextIdx 
       }).eq('id', sessionId);
@@ -96,8 +112,8 @@ export default function FlashcardApp() {
     setCurrentIndex(prevIdx);
     setShowBack(false);
     
-    // Always update database for real-time sync
-    if (sessionId) {
+    // Only update database if live sync is enabled
+    if (sessionId && isLive) {
       await supabase.from('flashcard_sessions').update({ 
         current_index: prevIdx 
       }).eq('id', sessionId);
@@ -107,7 +123,13 @@ export default function FlashcardApp() {
   const toggleLive = async () => {
     const nextLiveState = !isLive;
     setIsLive(nextLiveState);
-    await supabase.from('flashcard_sessions').update({ is_live: nextLiveState }).eq('id', sessionId);
+    
+    if (sessionId) {
+      await supabase.from('flashcard_sessions').update({ 
+        is_live: nextLiveState,
+        current_index: currentIndex // Sync current position when enabling
+      }).eq('id', sessionId);
+    }
   };
 
   const handleCopyLink = async () => {
@@ -125,10 +147,12 @@ export default function FlashcardApp() {
       const updatedCards = [...cards, newCard];
       setCards(updatedCards);
       
-      // Update database for real-time sync
-      await supabase.from('flashcard_sessions').update({ 
-        cards: updatedCards 
-      }).eq('id', sessionId);
+      // Update database (works regardless of live sync for adding cards)
+      if (sessionId) {
+        await supabase.from('flashcard_sessions').update({ 
+          cards: updatedCards 
+        }).eq('id', sessionId);
+      }
       
       setNewCard({ front: '', back: '' });
       setShowAddCard(false);
