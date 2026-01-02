@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Connection to your database
@@ -8,11 +8,15 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function FlashcardApp() {
-  const [cards, setCards] = useState([{ front: '', back: '' }]);
+  const [cards, setCards] = useState<Array<{front: string, back: string}>>([{ front: '', back: '' }]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [showBack, setShowBack] = useState(false);
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [newCard, setNewCard] = useState({ front: '', back: '' });
+  const [copySuccess, setCopySuccess] = useState(false);
+  const addCardRef = useRef<HTMLDivElement>(null);
 
   // Load session from URL if it exists
   useEffect(() => {
@@ -50,11 +54,15 @@ export default function FlashcardApp() {
   }, [sessionId]);
 
   const createSession = async () => {
-    const { data } = await supabase.from('flashcard_sessions').insert([{ cards, is_live: false }]).select().single();
+    // Filter out any blank cards before creating session
+    const validCards = cards.filter(card => card.front.trim() && card.back.trim());
+    
+    const { data } = await supabase.from('flashcard_sessions').insert([{ cards: validCards, is_live: false }]).select().single();
     if (data) {
       const newUrl = `${window.location.origin}?session=${data.id}`;
       window.history.pushState({}, '', newUrl);
       setSessionId(data.id);
+      setCards(validCards);
     }
   };
 
@@ -67,14 +75,61 @@ export default function FlashcardApp() {
     }
   };
 
+  const handlePrevious = async () => {
+    const prevIdx = (currentIndex - 1 + cards.length) % cards.length;
+    setCurrentIndex(prevIdx);
+    setShowBack(false);
+    if (isLive) {
+      await supabase.from('flashcard_sessions').update({ current_index: prevIdx }).eq('id', sessionId);
+    }
+  };
+
   const toggleLive = async () => {
     const nextLiveState = !isLive;
     setIsLive(nextLiveState);
     await supabase.from('flashcard_sessions').update({ is_live: nextLiveState }).eq('id', sessionId);
   };
 
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleAddNewCard = async () => {
+    if (newCard.front.trim() && newCard.back.trim()) {
+      const updatedCards = [...cards, newCard];
+      setCards(updatedCards);
+      await supabase.from('flashcard_sessions').update({ cards: updatedCards }).eq('id', sessionId);
+      setNewCard({ front: '', back: '' });
+      setShowAddCard(false);
+    }
+  };
+
+  const handleShowAddCard = () => {
+    setShowAddCard(true);
+    setTimeout(() => {
+      addCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
+  const handleAddCardInCreation = () => {
+    const validCards = cards.filter(card => card.front.trim() && card.back.trim());
+    setCards([...validCards, { front: '', back: '' }]);
+    setTimeout(() => {
+      const lastCard = document.querySelector(`[data-card-index="${validCards.length}"]`);
+      lastCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
+  const hasValidCards = cards.some(card => card.front.trim() && card.back.trim());
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-10 text-gray-900">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 text-gray-900">
       {/* Font Definitions */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Amiri&family=Libre+Baskerville&family=Noto+Serif+Bengali&display=swap');
@@ -83,45 +138,59 @@ export default function FlashcardApp() {
         }
       `}</style>
 
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl w-full mx-auto">
         {!sessionId ? (
           <div className="space-y-6 bg-white p-8 rounded-2xl shadow-sm border">
-            <h1 className="text-2xl font-bold border-b pb-4">Create Flashcards</h1>
+            <h1 className="text-2xl font-bold border-b pb-4 text-center">Create Flashcards</h1>
             {cards.map((card, i) => (
-              <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input 
-                  className="p-3 border rounded-lg custom-font-stack text-lg" 
-                  placeholder="Front side..."
-                  value={card.front}
-                  onChange={(e) => {
-                    const c = [...cards]; c[i].front = e.target.value; setCards(c);
-                  }}
-                />
-                <input 
-                  className="p-3 border rounded-lg custom-font-stack text-lg" 
-                  placeholder="Back side..."
-                  value={card.back}
-                  onChange={(e) => {
-                    const c = [...cards]; c[i].back = e.target.value; setCards(c);
-                  }}
-                />
+              <div key={i} className="space-y-2" data-card-index={i}>
+                <div className="text-sm font-semibold text-gray-600">Card {i + 1}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input 
+                    className="p-3 border rounded-lg custom-font-stack text-lg" 
+                    placeholder="Front side..."
+                    value={card.front}
+                    onChange={(e) => {
+                      const c = [...cards]; c[i].front = e.target.value; setCards(c);
+                    }}
+                  />
+                  <input 
+                    className="p-3 border rounded-lg custom-font-stack text-lg" 
+                    placeholder="Back side..."
+                    value={card.back}
+                    onChange={(e) => {
+                      const c = [...cards]; c[i].back = e.target.value; setCards(c);
+                    }}
+                  />
+                </div>
               </div>
             ))}
-            <div className="flex gap-4">
-              <button onClick={() => setCards([...cards, { front: '', back: '' }])} className="text-blue-600 font-medium">+ Add Card</button>
-              <button onClick={createSession} className="bg-blue-600 text-white px-6 py-2 rounded-lg ml-auto hover:bg-blue-700">Launch & Share</button>
+            <div className="flex gap-4 items-center">
+              <button onClick={handleAddCardInCreation} className="text-blue-600 font-medium">+ Add Card</button>
+              <button 
+                onClick={createSession} 
+                disabled={!hasValidCards}
+                className={`px-6 py-2 rounded-lg ml-auto transition ${hasValidCards ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+              >
+                Launch
+              </button>
             </div>
           </div>
         ) : (
           <div className="space-y-8 text-center">
-            <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border">
+            <div className="flex flex-wrap justify-center items-center gap-4 bg-white p-4 rounded-xl shadow-sm border">
                <button 
                 onClick={toggleLive}
                 className={`px-4 py-2 rounded-full font-bold transition ${isLive ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}
                >
                 {isLive ? '● Live Sync Active' : '○ Enable Live Sync'}
                </button>
-               <div className="text-sm text-gray-400 select-all">Share Link: {window.location.href}</div>
+               <button 
+                onClick={handleCopyLink}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition font-medium"
+               >
+                {copySuccess ? 'Link Copied' : 'Share'}
+               </button>
             </div>
 
             <div 
@@ -134,9 +203,56 @@ export default function FlashcardApp() {
               </h2>
             </div>
 
-            <div className="flex justify-between items-center max-w-xs mx-auto">
-              <button onClick={handleNext} className="w-full py-4 bg-black text-white rounded-2xl text-xl font-bold hover:bg-gray-800">Next Card →</button>
+            <div className="space-y-4">
+              <div className="flex justify-center items-center gap-4">
+                <button onClick={handlePrevious} className="px-8 py-4 bg-black text-white rounded-2xl text-xl font-bold hover:bg-gray-800">← Previous Card</button>
+                <button onClick={handleNext} className="px-8 py-4 bg-black text-white rounded-2xl text-xl font-bold hover:bg-gray-800">Next Card →</button>
+              </div>
+              <div className="flex justify-center">
+                <button 
+                  onClick={handleShowAddCard} 
+                  className="px-6 py-4 bg-green-600 text-white rounded-2xl text-lg font-bold hover:bg-green-700"
+                >
+                  Add Flashcard
+                </button>
+              </div>
             </div>
+
+            {showAddCard && (
+              <div ref={addCardRef} className="bg-white p-6 rounded-xl shadow-sm border space-y-4">
+                <h3 className="font-bold text-lg">Add New Card</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input 
+                    className="p-3 border rounded-lg custom-font-stack text-lg" 
+                    placeholder="Front side..."
+                    value={newCard.front}
+                    onChange={(e) => setNewCard({ ...newCard, front: e.target.value })}
+                  />
+                  <input 
+                    className="p-3 border rounded-lg custom-font-stack text-lg" 
+                    placeholder="Back side..."
+                    value={newCard.back}
+                    onChange={(e) => setNewCard({ ...newCard, back: e.target.value })}
+                  />
+                </div>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={handleAddNewCard}
+                    disabled={!newCard.front.trim() || !newCard.back.trim()}
+                    className={`flex-1 py-3 rounded-lg font-bold ${newCard.front.trim() && newCard.back.trim() ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                  >
+                    Add
+                  </button>
+                  <button 
+                    onClick={() => setShowAddCard(false)}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <p className="text-gray-400 font-serif italic">Card {currentIndex + 1} of {cards.length}</p>
           </div>
         )}
